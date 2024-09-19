@@ -8,6 +8,8 @@
 #    the replica count to use for a replica volume
 # @param arbiter
 #    the arbiter count to use for a replica volume
+# @param thin_arbiter
+#    thin arbiter to use for a replica volume
 # @param transport
 #    the transport to use. Defaults to tcp
 # @param rebalance
@@ -51,6 +53,7 @@ define gluster::volume (
   Boolean $rebalance                          = true,
   Boolean $heal                               = true,
   Boolean $remove_options                     = false,
+  Boolean $thin_arbiter                       = false,
   Optional[Array] $options                    = undef,
   Optional[Integer] $stripe                   = undef,
   Optional[Integer] $replica                  = undef,
@@ -83,7 +86,15 @@ define gluster::volume (
   }
 
   if $arbiter {
-    $_arbiter = "arbiter ${arbiter}"
+    if $thin_arbiter {
+      $_arbiter = "thin-arbiter ${arbiter}"
+
+      if $arbiter != 1 or $replica != 2 {
+        notify { 'A thin-arbiter volume requires replicas = 2 and thin-arbiter = 1': }
+      }
+    } else {
+      $_arbiter = "arbiter ${arbiter}"
+    }
   } else {
     $_arbiter = ''
   }
