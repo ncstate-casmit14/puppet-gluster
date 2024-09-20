@@ -174,58 +174,63 @@ define gluster::volume (
       if $ensure == 'present' {
         # our fact lists bricks comma-separated, but we need an array
         $vol_bricks = split( $facts["gluster_volume_${title}_bricks"], ',')
-        if $bricks != $vol_bricks {
+        
+        if (!$thin_arbiter and $bricks != $vol_bricks) or ($thin_arbiter and $bricks[0,2] != $vol_bricks) {
           # this resource's list of bricks does not match the existing
           # volume's list of bricks
           $new_bricks = difference($bricks, $vol_bricks)
 
           $vol_count = count($vol_bricks)
           if count($bricks) > $vol_count {
-            # adding bricks
-
-            # if we have a stripe or replica volume, make sure the
-            # number of bricks to add is a factor of that value
-            if $stripe {
-              if ( count($new_bricks) % $stripe ) != 0 {
-                fail("Number of bricks to add is not a multiple of stripe count ${stripe}")
-              }
-              $s = "stripe ${stripe}"
+            if $thin_arbiter {
+              notify {'Adding bricks to a thin-arbiter volume is not currently supported': }
             } else {
-              $s = ''
-            }
-
-            if $replica {
-              if $arbiter and $arbiter != 0 {
-                $r = "replica ${replica} arbiter ${arbiter}"
-              } else {
-                if ( count($bricks) % $replica ) != 0 {
-                  fail("Number of bricks to add is not a multiple of replica count ${replica}")
+              # adding bricks
+  
+              # if we have a stripe or replica volume, make sure the
+              # number of bricks to add is a factor of that value
+              if $stripe {
+                if ( count($new_bricks) % $stripe ) != 0 {
+                  fail("Number of bricks to add is not a multiple of stripe count ${stripe}")
                 }
-                $r = "replica ${replica}"
+                $s = "stripe ${stripe}"
+              } else {
+                $s = ''
               }
-            } else {
-              $r = ''
-            }
-
-            $new_bricks_list = join($new_bricks, ' ')
-            exec { "gluster add bricks to ${title}":
-              command => "${facts['gluster_binary']} volume add-brick ${title} ${s} ${r} ${new_bricks_list} ${_force}",
-            }
-
-            if $rebalance {
-              exec { "gluster rebalance ${title}":
-                command => "${facts['gluster_binary']} volume rebalance ${title} start",
-                require => Exec["gluster add bricks to ${title}"],
+  
+              if $replica {
+                if $arbiter and $arbiter != 0 {
+                  $r = "replica ${replica} arbiter ${arbiter}"
+                } else {
+                  if ( count($bricks) % $replica ) != 0 {
+                    fail("Number of bricks to add is not a multiple of replica count ${replica}")
+                  }
+                  $r = "replica ${replica}"
+                }
+              } else {
+                $r = ''
               }
-            }
-
-            if $replica and $heal {
-              # there is a delay after which a brick is added before
-              # the self heal daemon comes back to life.
-              # as such, we sleep 5 here before starting the heal
-              exec { "gluster heal ${title}":
-                command => "/bin/sleep 5; ${facts['gluster_binary']} volume heal ${title} full",
-                require => Exec["gluster add bricks to ${title}"],
+  
+              $new_bricks_list = join($new_bricks, ' ')
+              exec { "gluster add bricks to ${title}":
+                command => "${facts['gluster_binary']} volume add-brick ${title} ${s} ${r} ${new_bricks_list} ${_force}",
+              }
+  
+              if $rebalance {
+                exec { "gluster rebalance ${title}":
+                  command => "${facts['gluster_binary']} volume rebalance ${title} start",
+                  require => Exec["gluster add bricks to ${title}"],
+                }
+              }
+  
+              if $replica and $heal {
+                # there is a delay after which a brick is added before
+                # the self heal daemon comes back to life.
+                # as such, we sleep 5 here before starting the heal
+                exec { "gluster heal ${title}":
+                  command => "/bin/sleep 5; ${facts['gluster_binary']} volume heal ${title} full",
+                  require => Exec["gluster add bricks to ${title}"],
+                }
               }
             }
           } elsif count($bricks) < $vol_count {
