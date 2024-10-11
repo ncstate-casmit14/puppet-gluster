@@ -38,7 +38,7 @@ if binary
   # Get our peer information from gluster peer status --xml (Code credit to github user: coder-hugo)
   peer_status_out = Facter::Util::Resolution.exec("#{binary} peer status --xml")
   # Catch when glusterd is not running
-  if peer_status_out.starts_with?("<?xml")
+  if peer_status_out.start_with?("<?xml")
     peer_status_xml = REXML::Document.new(peer_status_out)
     REXML::XPath.match(peer_status_xml, '/cliOutput/peerStatus/peer').each do |peer_xml|
       # Get the peer hostname
